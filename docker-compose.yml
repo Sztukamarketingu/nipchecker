@@ -1,7 +1,9 @@
 # Produkcja na Hostinger VPS – pliki wbudowane w obraz (bez ngrok, bez GitHub)
 services:
   nipchecker:
-    build: .
+    build:
+      context: .
+      no_cache: true
     restart: always
     environment:
       - GUS_BIR1_KEY=c75480d07a764cc1945f
