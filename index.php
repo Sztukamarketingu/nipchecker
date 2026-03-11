@@ -135,7 +135,8 @@ require_once __DIR__ . '/config.php';
                         <div class="readonly-grid" id="resultsGrid"></div>
                     </div>
                     <aside class="vat-box-wrapper">
-                        <h3 class="section-title">Dane surowe GUS</h3>
+                        <h3 class="section-title">Dane surowe / status</h3>
+                        <div id="sourceInfo" class="source-info"></div>
                         <pre id="rawDataBox" class="raw-data-box">Brak danych</pre>
                     </aside>
                 </div>
@@ -166,7 +167,7 @@ require_once __DIR__ . '/config.php';
 
         <section id="settingsTab" class="tab-content tab-hidden">
             <h3 class="section-title">Mapowanie pól</h3>
-            <p class="hint-text">Wybierz pola CRM dla danych pobieranych z GUS BIR1.</p>
+            <p class="hint-text">Wybierz pola CRM dla danych pobieranych z MF / GUS.</p>
             <div id="mappingContainer" class="mapping-container"></div>
             <div class="actions-row">
                 <button id="saveSettingsBtn" class="ui-btn ui-btn-primary">

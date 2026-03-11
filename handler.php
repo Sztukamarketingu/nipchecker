@@ -12,18 +12,20 @@ if (!preg_match('/^\d{10}$/', $nip)) {
 
 $date = date('Y-m-d');
 
-// Tylko GUS BIR1.1 – jedyne źródło danych
-if (GUS_BIR1_KEY === '') {
-    http_response_code(500);
-    echo json_encode(['error' => 'Brak klucza GUS BIR1. Skonfiguruj GUS_BIR1_KEY.'], JSON_UNESCAPED_UNICODE);
+// 1. MF (Biała Lista) – firmy z VAT
+$mfResult = fetchFromMf($nip, $date);
+if ($mfResult !== null) {
+    echo json_encode($mfResult, JSON_UNESCAPED_UNICODE);
     exit;
 }
 
-$result = fetchFromGusBir1($nip, $date);
-
-if ($result !== null) {
-    echo json_encode($result, JSON_UNESCAPED_UNICODE);
-    exit;
+// 2. GUS BIR1.1 – fallback (firmy bez VAT, wszystkie podmioty)
+if (GUS_BIR1_KEY !== '') {
+    $gusResult = fetchFromGusBir1($nip, $date);
+    if ($gusResult !== null) {
+        echo json_encode($gusResult, JSON_UNESCAPED_UNICODE);
+        exit;
+    }
 }
 
 http_response_code(200);
@@ -34,7 +36,106 @@ echo json_encode([
 ], JSON_UNESCAPED_UNICODE);
 
 /**
- * Pobiera dane firmy z GUS BIR1.1 (SOAP).
+ * MF (Biała Lista) – firmy zarejestrowane jako podatnicy VAT.
+ */
+function fetchFromMf(string $nip, string $date): ?array
+{
+    $url = "https://wl-api.mf.gov.pl/api/search/nip/{$nip}?date={$date}";
+    $httpCode = 0;
+    $response = '';
+    $requestError = '';
+
+    if (function_exists('curl_init')) {
+        $ch = curl_init($url);
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+        curl_setopt($ch, CURLOPT_TIMEOUT, 15);
+        curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);
+        curl_setopt($ch, CURLOPT_HTTPHEADER, ['Accept: application/json']);
+        $response = (string)curl_exec($ch);
+        $httpCode = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        $requestError = (string)curl_error($ch);
+    } else {
+        $context = stream_context_create([
+            'http' => [
+                'method' => 'GET',
+                'timeout' => 15,
+                'header' => "Accept: application/json\r\nUser-Agent: Bitrix24-NIP-Checker\r\n"
+            ]
+        ]);
+        $response = (string)@file_get_contents($url, false, $context);
+        $headers = $http_response_header ?? [];
+        if (!empty($headers[0]) && preg_match('/\s(\d{3})\s/', $headers[0], $m)) {
+            $httpCode = (int)$m[1];
+        }
+        if ($response === '') {
+            $requestError = 'Brak odpowiedzi z API MF.';
+        }
+    }
+
+    if ($response === '' && $requestError !== '') {
+        http_response_code(502);
+        echo json_encode(['error' => 'Błąd połączenia z API MF: ' . $requestError], JSON_UNESCAPED_UNICODE);
+        exit;
+    }
+
+    if ($httpCode >= 400) {
+        if ($httpCode === 404) {
+            return null;
+        }
+        http_response_code(502);
+        echo json_encode(['error' => 'API MF zwróciło błąd HTTP ' . $httpCode], JSON_UNESCAPED_UNICODE);
+        exit;
+    }
+
+    $decoded = json_decode($response, true);
+    if (!is_array($decoded)) {
+        http_response_code(502);
+        echo json_encode(['error' => 'Nieprawidłowa odpowiedź z API MF.'], JSON_UNESCAPED_UNICODE);
+        exit;
+    }
+
+    $subject = $decoded['result']['subject'] ?? null;
+    if (!is_array($subject) || empty($subject)) {
+        return null;
+    }
+
+    $name = trim((string)($subject['name'] ?? ''));
+    $workingAddressRaw = $subject['workingAddress'] ?? $subject['residenceAddress'] ?? '';
+    $workingAddress = trim((string)$workingAddressRaw);
+    $statusVat = strtolower((string)($subject['statusVat'] ?? ''));
+    $regon = trim((string)($subject['regon'] ?? ''));
+    $address = parseAddress($workingAddress);
+
+    return [
+        'found' => true,
+        'nip' => $nip,
+        'vatActive' => in_array($statusVat, ['czynny', 'active'], true),
+        'source' => 'mf',
+        'requestDate' => $date,
+        'company' => [
+            'name' => $name,
+            'nip' => $nip,
+            'regon' => $regon,
+            'country' => 'Polska',
+            'voivodeship' => '',
+            'county' => '',
+            'municipality' => '',
+            'city' => $address['city'],
+            'postOffice' => '',
+            'street' => $address['street'],
+            'buildingNumber' => $address['buildingNumber'],
+            'apartmentNumber' => $address['apartmentNumber'],
+            'postalCode' => $address['postalCode'],
+            'type' => '',
+            'pkd' => $regon,
+            'workingAddress' => $workingAddress
+        ],
+        'raw' => $decoded
+    ];
+}
+
+/**
+ * GUS BIR1.1 – wszystkie podmioty (fallback gdy MF zwraca pusty).
  */
 function fetchFromGusBir1(string $nip, string $date): ?array
 {
@@ -91,6 +192,7 @@ function fetchFromGusBir1(string $nip, string $date): ?array
         return [
             'found' => true,
             'nip' => $nip,
+            'vatActive' => false,
             'source' => 'gus',
             'requestDate' => $date,
             'company' => $company,
@@ -102,9 +204,6 @@ function fetchFromGusBir1(string $nip, string $date): ?array
     }
 }
 
-/**
- * Mapuje wiersz XML GUS na obiekt company (wszystkie dostępne pola).
- */
 function mapGusRowToCompany(array $row, string $nip): array
 {
     $get = function (array $keys) use ($row): string {
@@ -137,9 +236,6 @@ function mapGusRowToCompany(array $row, string $nip): array
     ];
 }
 
-/**
- * Parse GUS BIR1.1 XML result (root/row structure) into associative array.
- */
 function parseGusXmlResult(string $xml): ?array
 {
     $doc = @simplexml_load_string($xml);
@@ -194,4 +290,40 @@ function buildWorkingAddress(string $street, string $buildingNumber, string $apa
         $parts[] = trim($postalCode . ' ' . $city);
     }
     return implode(', ', $parts);
+}
+
+function parseAddress(string $workingAddress): array
+{
+    $result = [
+        'street' => '',
+        'buildingNumber' => '',
+        'apartmentNumber' => '',
+        'postalCode' => '',
+        'city' => ''
+    ];
+
+    if ($workingAddress === '') {
+        return $result;
+    }
+
+    $parts = array_map('trim', explode(',', $workingAddress, 2));
+    $streetPart = $parts[0] ?? '';
+    $cityPart = $parts[1] ?? '';
+
+    if (preg_match('/^(.*?)(?:\s+(\d+[A-Za-z]?))(?:\/(\d+[A-Za-z]?))?$/u', $streetPart, $m)) {
+        $result['street'] = trim($m[1]);
+        $result['buildingNumber'] = trim($m[2] ?? '');
+        $result['apartmentNumber'] = trim($m[3] ?? '');
+    } else {
+        $result['street'] = $streetPart;
+    }
+
+    if (preg_match('/(\d{2}-\d{3})\s+(.+)/u', $cityPart, $m)) {
+        $result['postalCode'] = trim($m[1]);
+        $result['city'] = trim($m[2]);
+    } else {
+        $result['city'] = $cityPart;
+    }
+
+    return $result;
 }

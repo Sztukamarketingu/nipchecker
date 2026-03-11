@@ -317,6 +317,16 @@
             grid.appendChild(field);
         });
 
+        var sourceInfo = byId("sourceInfo");
+        if (sourceInfo) {
+            var src = data.source === "mf" ? "MF (Biała Lista)" : "GUS BIR1";
+            var vat = data.source === "mf" && data.vatActive
+                ? " – czynny podatnik VAT"
+                : data.source === "mf"
+                ? " – nie jest czynnym podatnikiem VAT"
+                : " – brak statusu VAT";
+            sourceInfo.textContent = "Źródło: " + src + (data.source === "mf" ? vat : "");
+        }
         if (rawBox) {
             rawBox.textContent = data.raw ? JSON.stringify(data.raw, null, 2) : "Brak danych surowych";
         }
