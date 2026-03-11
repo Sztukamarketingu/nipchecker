@@ -13,6 +13,6 @@ WORKDIR /var/www/html
 RUN composer install --no-dev --no-scripts --no-interaction
 
 # Źródła aplikacji
-COPY index.php handler.php install.php config.php app.js style.css status.php /var/www/html/
+COPY index.php handler.php install.php config.php app.js style.css status.php gus_test.php /var/www/html/
 
 RUN chown -R www-data:www-data /var/www/html

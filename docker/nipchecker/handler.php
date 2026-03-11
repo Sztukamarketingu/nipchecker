@@ -16,26 +16,24 @@ if (!preg_match('/^\d{10}$/', $nip)) {
 }
 
 $date = date('Y-m-d');
-$debug = isset($_GET['debug']) && $_GET['debug'] === '1';
 
 // GUS BIR1.1 – jedyne źródło danych
-$result = fetchFromGusBir1($nip, $date, $debug);
+$result = fetchFromGusBir1($nip, $date);
 if ($result !== null) {
-    if (is_array($result) && isset($result['found'])) {
-        echo json_encode($result, JSON_UNESCAPED_UNICODE);
-        exit;
-    }
-    // debug zwrócił błąd
     echo json_encode($result, JSON_UNESCAPED_UNICODE);
     exit;
 }
 
 http_response_code(200);
-echo json_encode([
+$response = [
     'found' => false,
     'nip' => $nip,
     'error' => 'Nie znaleziono podmiotu dla podanego NIP.'
-], JSON_UNESCAPED_UNICODE);
+];
+if (!empty($GLOBALS['_gus_last_error'])) {
+    $response['gus_error'] = $GLOBALS['_gus_last_error'];
+}
+echo json_encode($response, JSON_UNESCAPED_UNICODE);
 
 /**
  * MF (Biała Lista) – firmy zarejestrowane jako podatnicy VAT.
@@ -139,8 +137,9 @@ function fetchFromMf(string $nip, string $date): ?array
 /**
  * GUS BIR1.1 – wszystkie podmioty (przez GusApi z obsługą MTOM).
  */
-function fetchFromGusBir1(string $nip, string $date, bool $debug = false): array|null
+function fetchFromGusBir1(string $nip, string $date): ?array
 {
+    $GLOBALS['_gus_last_error'] = null;
     $useTest = defined('GUS_BIR1_USE_TEST') && GUS_BIR1_USE_TEST;
     $env = $useTest ? 'dev' : 'prod';
 
@@ -150,22 +149,21 @@ function fetchFromGusBir1(string $nip, string $date, bool $debug = false): array
         $reports = $gus->getByNip($nip);
         $gus->logout();
     } catch (InvalidUserKeyException $e) {
+        $GLOBALS['_gus_last_error'] = 'Nieprawidłowy klucz API GUS';
         error_log('GUS BIR1: Nieprawidłowy klucz API');
-        return $debug ? ['found' => false, 'debug_error' => 'InvalidUserKeyException: Nieprawidłowy klucz API'] : null;
+        return null;
     } catch (NotFoundException $e) {
-        return $debug ? ['found' => false, 'debug_error' => 'NotFoundException: GUS nie znalazł podmiotu'] : null;
+        $GLOBALS['_gus_last_error'] = 'GUS nie znalazł podmiotu';
+        return null;
     } catch (Throwable $e) {
+        $GLOBALS['_gus_last_error'] = $e->getMessage();
         error_log('GUS BIR1: ' . $e->getMessage());
-        return $debug ? [
-            'found' => false,
-            'debug_error' => $e->getMessage(),
-            'debug_class' => get_class($e),
-            'debug_file' => $e->getFile() . ':' . $e->getLine()
-        ] : null;
+        return null;
     }
 
     if (empty($reports)) {
-        return $debug ? ['found' => false, 'debug_error' => 'GUS zwrócił pustą listę'] : null;
+        $GLOBALS['_gus_last_error'] = 'GUS zwrócił pustą listę';
+        return null;
     }
 
     $report = $reports[0];
