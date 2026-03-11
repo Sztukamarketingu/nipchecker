@@ -10,7 +10,7 @@ COPY docker-env.conf /etc/apache2/conf-available/
 RUN a2enconf docker-env
 
 # Źródła aplikacji + vendor (bez composer install – sieć może być niedostępna w buildzie)
-COPY index.php handler.php install.php config.php app.js style.css status.php gus_test.php /var/www/html/
+COPY index.php handler.php install.php config.php app.js style.css status.php gus_test.php cleanup_placements.php /var/www/html/
 COPY vendor/ /var/www/html/vendor/
 
 RUN chown -R www-data:www-data /var/www/html

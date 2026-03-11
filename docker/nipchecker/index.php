@@ -180,6 +180,7 @@ require_once __DIR__ . '/config.php';
                     <span class="ui-btn-text">Odinstaluj zakładkę NIP</span>
                 </button>
             </div>
+            <p class="hint-text">Masz dwie zakładki NIP (jedna pusta)? <a href="cleanup_placements.php">Czyszczenie zakładek</a></p>
             <div id="settingsMessage" class="hint-text"></div>
         </section>
 

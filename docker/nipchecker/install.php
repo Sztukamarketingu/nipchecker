@@ -31,7 +31,9 @@ $appUrl = $baseUrl . '/index.php?build=' . rawurlencode(APP_VERSION);
                 placementHandler + "?build=<?php echo rawurlencode(APP_VERSION); ?>",
                 placementHandler + "?build=20260306",
                 placementHandler + "?build=20260306-2",
-                placementHandler + "?build=20260306-3"
+                placementHandler + "?build=20260306-3",
+                "https://nip.aikuznia.cloud/index.php",
+                "https://nip.aikuznia.cloud/"
             ];
 
             if (!window.BX24 || typeof BX24.init !== "function") {
