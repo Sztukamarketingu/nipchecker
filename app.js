@@ -271,7 +271,7 @@
                 if (payload.found === false || !payload.company) {
                     state.lastResult = null;
                     renderResults(null);
-                    alert("Nie znaleziono danych firmy dla podanego NIP.");
+                    alert("Nie znaleziono w MF (Biała Lista) ani w GUS. Sprawdź poprawność NIP.");
                     return;
                 }
                 state.lastResult = payload;
@@ -281,7 +281,7 @@
             })
             .catch(function (error) {
                 byId("searchNipBtn").classList.remove("ui-btn-clock");
-                alert("Błąd pobierania danych z MF: " + error.message);
+                alert("Błąd pobierania danych: " + error.message);
             });
     }
 
