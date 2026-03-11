@@ -12,20 +12,11 @@ if (!preg_match('/^\d{10}$/', $nip)) {
 
 $date = date('Y-m-d');
 
-// 1. MF (Biała Lista) – firmy z VAT
-$mfResult = fetchFromMf($nip, $date);
-if ($mfResult !== null) {
-    echo json_encode($mfResult, JSON_UNESCAPED_UNICODE);
+// GUS BIR1.1 – jedyne źródło danych
+$result = fetchFromGusBir1($nip, $date);
+if ($result !== null) {
+    echo json_encode($result, JSON_UNESCAPED_UNICODE);
     exit;
-}
-
-// 2. GUS BIR1.1 – fallback (gdy MF zwraca pusty)
-if (GUS_BIR1_KEY !== '') {
-    $gusResult = fetchFromGusBir1($nip, $date);
-    if ($gusResult !== null) {
-        echo json_encode($gusResult, JSON_UNESCAPED_UNICODE);
-        exit;
-    }
 }
 
 http_response_code(200);
@@ -146,10 +137,10 @@ function fetchFromGusBir1(string $nip, string $date): ?array
 
     try {
         $client = new SoapClient($wsdl, [
-            'trace' => 0,
+            'trace' => 1,
             'exceptions' => true,
             'cache_wsdl' => WSDL_CACHE_NONE,
-            'connection_timeout' => 15,
+            'connection_timeout' => 30,
             'soap_version' => SOAP_1_2,
         ]);
     } catch (Throwable $e) {
@@ -168,7 +159,12 @@ function fetchFromGusBir1(string $nip, string $date): ?array
         $client->__setSoapHeaders($header);
 
         $searchParams = ['pParametryWyszukiwania' => ['Nip' => $nip]];
-        $searchResult = $client->DaneSzukajPodmioty($searchParams);
+        try {
+            $searchResult = $client->DaneSzukajPodmioty($searchParams);
+        } catch (Throwable $e) {
+            $searchParams = ['pParametryWyszukiwania' => 'Nip=' . $nip];
+            $searchResult = $client->DaneSzukajPodmioty($searchParams);
+        }
         $xmlResult = $searchResult->DaneSzukajPodmiotyResult ?? '';
 
         if ($xmlResult === '' || $xmlResult === '4') {
@@ -203,6 +199,7 @@ function fetchFromGusBir1(string $nip, string $date): ?array
         return null;
     }
 }
+
 
 function mapGusRowToCompany(array $row, string $nip): array
 {
