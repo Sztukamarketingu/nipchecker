@@ -1,0 +1,51 @@
+name: Static Analysis
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  phpcs:
+    name: PHPCs
+    runs-on: ubuntu-24.04
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.4'
+
+      - name: Execute composer validate
+        run: composer validate --strict
+
+      - name: Install Dependencies
+        uses: ramsey/composer-install@v3
+
+      - name: Execute PHPCs
+        run: vendor/bin/phpcs src tests
+
+  phpstan:
+    name: PHPStan
+    runs-on: ubuntu-24.04
+
+    strategy:
+      matrix:
+        php: [ '8.1', '8.2', '8.3', '8.4', '8.5' ]
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ matrix.php }}
+
+      - name: Install Dependencies
+        uses: ramsey/composer-install@v3
+
+      - name: Execute PHPStan
+        run: vendor/bin/phpstan --no-progress

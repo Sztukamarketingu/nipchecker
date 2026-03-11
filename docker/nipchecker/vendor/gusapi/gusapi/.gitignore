@@ -1,0 +1,9 @@
+vendor/
+build/
+examples/captcha.jpeg
+.idea
+phpunit.xml
+.php-cs-fixer.cache
+.php_cs
+.phpunit.result.cache
+composer.lock
