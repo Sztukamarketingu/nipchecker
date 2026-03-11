@@ -1,5 +1,8 @@
 FROM php:8.2-apache
 
+# GusApi wymaga ext-soap (SOAP client dla GUS BIR1)
+RUN docker-php-ext-install soap
+
 # Instalacja Composer
 COPY --from=composer:2 /usr/bin/composer /usr/bin/composer
 
