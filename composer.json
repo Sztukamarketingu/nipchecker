@@ -1,0 +1,5 @@
+{
+    "require": {
+        "gusapi/gusapi": "^6.3"
+    }
+}
