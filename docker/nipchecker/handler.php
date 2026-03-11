@@ -25,15 +25,11 @@ if ($result !== null) {
 }
 
 http_response_code(200);
-$response = [
+echo json_encode([
     'found' => false,
     'nip' => $nip,
     'error' => 'Nie znaleziono podmiotu dla podanego NIP.'
-];
-if (!empty($GLOBALS['_gus_last_error'])) {
-    $response['gus_error'] = $GLOBALS['_gus_last_error'];
-}
-echo json_encode($response, JSON_UNESCAPED_UNICODE);
+], JSON_UNESCAPED_UNICODE);
 
 /**
  * MF (Biała Lista) – firmy zarejestrowane jako podatnicy VAT.
@@ -139,7 +135,6 @@ function fetchFromMf(string $nip, string $date): ?array
  */
 function fetchFromGusBir1(string $nip, string $date): ?array
 {
-    $GLOBALS['_gus_last_error'] = null;
     $useTest = defined('GUS_BIR1_USE_TEST') && GUS_BIR1_USE_TEST;
     $env = $useTest ? 'dev' : 'prod';
 
@@ -149,20 +144,16 @@ function fetchFromGusBir1(string $nip, string $date): ?array
         $reports = $gus->getByNip($nip);
         $gus->logout();
     } catch (InvalidUserKeyException $e) {
-        $GLOBALS['_gus_last_error'] = 'Nieprawidłowy klucz API GUS';
         error_log('GUS BIR1: Nieprawidłowy klucz API');
         return null;
     } catch (NotFoundException $e) {
-        $GLOBALS['_gus_last_error'] = 'GUS nie znalazł podmiotu';
         return null;
     } catch (Throwable $e) {
-        $GLOBALS['_gus_last_error'] = $e->getMessage();
         error_log('GUS BIR1: ' . $e->getMessage());
         return null;
     }
 
     if (empty($reports)) {
-        $GLOBALS['_gus_last_error'] = 'GUS zwrócił pustą listę';
         return null;
     }
 

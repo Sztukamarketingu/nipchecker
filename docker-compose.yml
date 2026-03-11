@@ -1,4 +1,5 @@
-# Produkcja na Hostinger VPS – pliki wbudowane w obraz (bez ngrok, bez GitHub)
+# Produkcja na Hostinger VPS – pliki wbudowane w obraz
+# Lokalnie: utwórz .env z GUS_BIR1_KEY=twój_klucz
 services:
   nipchecker:
     build:
@@ -7,7 +8,7 @@ services:
       no_cache: true
     restart: always
     environment:
-      - GUS_BIR1_KEY=c75480d07a764cc1945f
+      - GUS_BIR1_KEY=${GUS_BIR1_KEY}
       - GUS_BIR1_USE_TEST=false
     labels:
       - traefik.enable=true
