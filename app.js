@@ -9,9 +9,7 @@
         { source: "municipality", label: "Gmina", defaults: [] },
         { source: "city", label: "Miasto", defaults: ["ADDRESS_CITY"] },
         { source: "postOffice", label: "Poczta", defaults: [] },
-        { source: "street", label: "Ulica", defaults: ["ADDRESS"] },
-        { source: "buildingNumber", label: "Nr budynku", defaults: ["ADDRESS_2"] },
-        { source: "apartmentNumber", label: "Nr lokalu", defaults: ["ADDRESS_2"] },
+        { source: "address", label: "Adres", defaults: ["ADDRESS", "ADDRESS_2"] },
         { source: "postalCode", label: "Kod pocztowy", defaults: ["ADDRESS_POSTAL_CODE"] },
         { source: "type", label: "Typ (P/F)", defaults: [] }
     ];
@@ -384,15 +382,14 @@
 
     function buildCrmPayload(source) {
         var payload = {};
+        var addressValue = source.address || [source.street, source.buildingNumber, source.apartmentNumber].filter(Boolean).join(" ").trim();
         Object.keys(state.mapping || {}).forEach(function (sourceKey) {
             var crmField = state.mapping[sourceKey];
-            if (!crmField || !source[sourceKey]) {
-                return;
-            }
-            payload[crmField] = source[sourceKey];
+            if (!crmField) return;
+            var value = (sourceKey === "address") ? addressValue : source[sourceKey];
+            if (value) payload[crmField] = value;
         });
 
-        // Keep CRM company title in sync even when mapping points elsewhere.
         if (source.name) {
             payload.TITLE = source.name;
         }

@@ -100,7 +100,8 @@ function fetchFromMf(string $nip, string $date): ?array
     $workingAddress = trim((string)$workingAddressRaw);
     $statusVat = strtolower((string)($subject['statusVat'] ?? ''));
     $regon = trim((string)($subject['regon'] ?? ''));
-    $address = parseAddress($workingAddress);
+    $addr = parseAddress($workingAddress);
+    $streetPart = trim($addr['street'] . ' ' . $addr['buildingNumber'] . ($addr['apartmentNumber'] !== '' ? '/' . $addr['apartmentNumber'] : ''));
 
     return [
         'found' => true,
@@ -116,12 +117,13 @@ function fetchFromMf(string $nip, string $date): ?array
             'voivodeship' => '',
             'county' => '',
             'municipality' => '',
-            'city' => $address['city'],
+            'city' => $addr['city'],
             'postOffice' => '',
-            'street' => $address['street'],
-            'buildingNumber' => $address['buildingNumber'],
-            'apartmentNumber' => $address['apartmentNumber'],
-            'postalCode' => $address['postalCode'],
+            'address' => $streetPart,
+            'street' => $addr['street'],
+            'buildingNumber' => $addr['buildingNumber'],
+            'apartmentNumber' => $addr['apartmentNumber'],
+            'postalCode' => $addr['postalCode'],
             'type' => '',
             'pkd' => $regon,
             'workingAddress' => $workingAddress
@@ -180,6 +182,11 @@ function fetchFromGusBir1(string $nip, string $date): ?array
 
 function mapGusReportToCompany(\GusApi\SearchReport $report, string $nip): array
 {
+    $street = $report->getStreet();
+    $building = $report->getPropertyNumber();
+    $apartment = $report->getApartmentNumber();
+    $address = trim($street . ' ' . $building . ($apartment !== '' ? '/' . $apartment : ''));
+
     return [
         'name' => $report->getName(),
         'nip' => $nip,
@@ -190,9 +197,10 @@ function mapGusReportToCompany(\GusApi\SearchReport $report, string $nip): array
         'municipality' => $report->getCommunity(),
         'city' => $report->getCity(),
         'postOffice' => $report->getPostCity(),
-        'street' => $report->getStreet(),
-        'buildingNumber' => $report->getPropertyNumber(),
-        'apartmentNumber' => $report->getApartmentNumber(),
+        'address' => $address,
+        'street' => $street,
+        'buildingNumber' => $building,
+        'apartmentNumber' => $apartment,
         'postalCode' => $report->getZipCode(),
         'type' => $report->getType(),
         'pkd' => $report->getRegon(),
