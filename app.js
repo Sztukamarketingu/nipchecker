@@ -2,13 +2,18 @@
     var FIELD_CONFIG = [
         { source: "name", label: "Pełna nazwa firmy", defaults: ["TITLE"] },
         { source: "nip", label: "NIP", defaults: ["UF_CRM_NIP", "UF_CRM_123_NIP", "COMMENTS"] },
+        { source: "regon", label: "REGON", defaults: ["COMMENTS"] },
         { source: "country", label: "Kraj", defaults: ["ADDRESS_COUNTRY"] },
+        { source: "voivodeship", label: "Województwo", defaults: [] },
+        { source: "county", label: "Powiat", defaults: [] },
+        { source: "municipality", label: "Gmina", defaults: [] },
         { source: "city", label: "Miasto", defaults: ["ADDRESS_CITY"] },
+        { source: "postOffice", label: "Poczta", defaults: [] },
         { source: "street", label: "Ulica", defaults: ["ADDRESS"] },
         { source: "buildingNumber", label: "Nr budynku", defaults: ["ADDRESS_2"] },
-        { source: "apartmentNumber", label: "Nr mieszkania/biura", defaults: ["ADDRESS_2"] },
+        { source: "apartmentNumber", label: "Nr lokalu", defaults: ["ADDRESS_2"] },
         { source: "postalCode", label: "Kod pocztowy", defaults: ["ADDRESS_POSTAL_CODE"] },
-        { source: "pkd", label: "PKD", defaults: ["INDUSTRY", "COMMENTS"] }
+        { source: "type", label: "Typ (P/F)", defaults: [] }
     ];
 
     var state = {
@@ -288,11 +293,10 @@
     function renderResults(data) {
         var grid = byId("resultsGrid");
         grid.innerHTML = "";
-        var vatBox = byId("vatStatusBox");
+        var rawBox = byId("rawDataBox");
 
         if (!data || !data.company) {
-            vatBox.className = "vat-status-box vat-status-unknown";
-            vatBox.textContent = "Brak danych";
+            if (rawBox) rawBox.textContent = "Brak danych";
             return;
         }
 
@@ -313,15 +317,8 @@
             grid.appendChild(field);
         });
 
-        if (data.source === "gus") {
-            vatBox.className = "vat-status-box vat-status-unknown";
-            vatBox.textContent = "Status VAT nie jest dostępny (dane z GUS BIR1).";
-        } else if (data.vatActive) {
-            vatBox.className = "vat-status-box vat-status-active";
-            vatBox.textContent = "Podmiot o wskazanym NIP jest zarejestrowanym czynnym podatnikiem VAT.";
-        } else {
-            vatBox.className = "vat-status-box vat-status-inactive";
-            vatBox.textContent = "Podmiot o wskazanym NIP nie jest zarejestrowanym czynnym podatnikiem VAT.";
+        if (rawBox) {
+            rawBox.textContent = data.raw ? JSON.stringify(data.raw, null, 2) : "Brak danych surowych";
         }
     }
 

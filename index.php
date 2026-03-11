@@ -66,6 +66,12 @@ require_once __DIR__ . '/config.php';
         .readonly-grid { display: grid; grid-template-columns: 1fr; gap: 12px; }
         .result-form, .vat-box-wrapper, .success-box { padding: 16px; border: 1px solid #dfe0e3; border-radius: 10px; background: #fff; }
         .readonly-value { min-height: 38px; border: 1px solid #dfe0e3; border-radius: 8px; padding: 7px 10px; background: #f7f8f9; }
+        .raw-data-box {
+            min-height: 200px; max-height: 400px; overflow: auto;
+            font-size: 12px; padding: 12px; background: #f8f9fa;
+            border: 1px solid #dfe0e3; border-radius: 8px;
+            white-space: pre-wrap; word-break: break-all;
+        }
         .vat-status-box {
             min-height: 240px; border-radius: 10px; padding: 16px; border: 1px solid;
             display: flex; align-items: center; justify-content: center; text-align: center; font-size: 24px;
@@ -129,10 +135,8 @@ require_once __DIR__ . '/config.php';
                         <div class="readonly-grid" id="resultsGrid"></div>
                     </div>
                     <aside class="vat-box-wrapper">
-                        <h3 class="section-title">VAT Status</h3>
-                        <div id="vatStatusBox" class="vat-status-box vat-status-unknown">
-                            Brak danych
-                        </div>
+                        <h3 class="section-title">Dane surowe GUS</h3>
+                        <pre id="rawDataBox" class="raw-data-box">Brak danych</pre>
                     </aside>
                 </div>
                 <div class="actions-row">
@@ -162,7 +166,7 @@ require_once __DIR__ . '/config.php';
 
         <section id="settingsTab" class="tab-content tab-hidden">
             <h3 class="section-title">Mapowanie pól</h3>
-            <p class="hint-text">Wybierz pola CRM dla danych pobieranych z MF / GUS.</p>
+            <p class="hint-text">Wybierz pola CRM dla danych pobieranych z GUS BIR1.</p>
             <div id="mappingContainer" class="mapping-container"></div>
             <div class="actions-row">
                 <button id="saveSettingsBtn" class="ui-btn ui-btn-primary">

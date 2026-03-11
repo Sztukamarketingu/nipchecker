@@ -12,129 +12,29 @@ if (!preg_match('/^\d{10}$/', $nip)) {
 
 $date = date('Y-m-d');
 
-// 1. Try MF (Biała Lista) first – source of VAT status.
-$mfResult = fetchFromMf($nip, $date);
-
-if ($mfResult !== null) {
-    echo json_encode($mfResult, JSON_UNESCAPED_UNICODE);
+// Tylko GUS BIR1.1 – jedyne źródło danych
+if (GUS_BIR1_KEY === '') {
+    http_response_code(500);
+    echo json_encode(['error' => 'Brak klucza GUS BIR1. Skonfiguruj GUS_BIR1_KEY.'], JSON_UNESCAPED_UNICODE);
     exit;
 }
 
-// 2. MF returned nothing (404/empty) – fallback to GUS BIR1.1 if key configured.
-if (GUS_BIR1_KEY !== '') {
-    $gusResult = fetchFromGusBir1($nip, $date);
-    if ($gusResult !== null) {
-        echo json_encode($gusResult, JSON_UNESCAPED_UNICODE);
-        exit;
-    }
+$result = fetchFromGusBir1($nip, $date);
+
+if ($result !== null) {
+    echo json_encode($result, JSON_UNESCAPED_UNICODE);
+    exit;
 }
 
-// 3. Neither MF nor GUS found the entity.
 http_response_code(200);
 echo json_encode([
     'found' => false,
     'nip' => $nip,
-    'vatActive' => false,
     'error' => 'Nie znaleziono podmiotu dla podanego NIP.'
 ], JSON_UNESCAPED_UNICODE);
 
 /**
- * Fetch company data from MF (Biała Lista). Returns JSON-ready array or null if not found.
- */
-function fetchFromMf(string $nip, string $date): ?array
-{
-    $url = "https://wl-api.mf.gov.pl/api/search/nip/{$nip}?date={$date}";
-    $httpCode = 0;
-    $response = '';
-    $requestError = '';
-
-    if (function_exists('curl_init')) {
-        $ch = curl_init($url);
-        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-        curl_setopt($ch, CURLOPT_TIMEOUT, 15);
-        curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);
-        curl_setopt($ch, CURLOPT_HTTPHEADER, ['Accept: application/json']);
-        $response = (string)curl_exec($ch);
-        $httpCode = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
-        $requestError = (string)curl_error($ch);
-    } else {
-        $context = stream_context_create([
-            'http' => [
-                'method' => 'GET',
-                'timeout' => 15,
-                'header' => "Accept: application/json\r\nUser-Agent: Bitrix24-NIP-Checker\r\n"
-            ]
-        ]);
-        $response = (string)@file_get_contents($url, false, $context);
-        $headers = $http_response_header ?? [];
-        if (!empty($headers[0]) && preg_match('/\s(\d{3})\s/', $headers[0], $m)) {
-            $httpCode = (int)$m[1];
-        }
-        if ($response === '') {
-            $requestError = 'Brak odpowiedzi z API MF.';
-        }
-    }
-
-    if ($response === '' && $requestError !== '') {
-        http_response_code(502);
-        echo json_encode(['error' => 'Błąd połączenia z API MF: ' . $requestError], JSON_UNESCAPED_UNICODE);
-        exit;
-    }
-
-    if ($httpCode >= 400) {
-        if ($httpCode === 404) {
-            return null;
-        }
-        http_response_code(502);
-        echo json_encode(['error' => 'API MF zwróciło błąd HTTP ' . $httpCode], JSON_UNESCAPED_UNICODE);
-        exit;
-    }
-
-    $decoded = json_decode($response, true);
-    if (!is_array($decoded)) {
-        http_response_code(502);
-        echo json_encode(['error' => 'Nieprawidłowa odpowiedź z API MF.'], JSON_UNESCAPED_UNICODE);
-        exit;
-    }
-
-    $subject = $decoded['result']['subject'] ?? null;
-    if (!is_array($subject) || empty($subject)) {
-        return null;
-    }
-
-    $name = trim((string)($subject['name'] ?? ''));
-    $workingAddressRaw = $subject['workingAddress'] ?? $subject['residenceAddress'] ?? '';
-    $workingAddress = trim((string)$workingAddressRaw);
-    $statusVat = strtolower((string)($subject['statusVat'] ?? ''));
-    $regon = trim((string)($subject['regon'] ?? ''));
-    $address = parseAddress($workingAddress);
-
-    return [
-        'found' => true,
-        'nip' => $nip,
-        'vatActive' => in_array($statusVat, ['czynny', 'active'], true),
-        'vatStatusRaw' => $subject['statusVat'] ?? '',
-        'source' => 'mf',
-        'requestDate' => $date,
-        'company' => [
-            'name' => $name,
-            'nip' => $nip,
-            'country' => 'Polska',
-            'city' => $address['city'],
-            'street' => $address['street'],
-            'buildingNumber' => $address['buildingNumber'],
-            'apartmentNumber' => $address['apartmentNumber'],
-            'postalCode' => $address['postalCode'],
-            'pkd' => $regon,
-            'workingAddress' => $workingAddress
-        ],
-        'raw' => $decoded
-    ];
-}
-
-/**
- * Fetch company data from GUS BIR1.1 (SOAP). Returns JSON-ready array or null.
- * Used as fallback when MF returns no data (e.g. entities not on VAT list).
+ * Pobiera dane firmy z GUS BIR1.1 (SOAP).
  */
 function fetchFromGusBir1(string $nip, string $date): ?array
 {
@@ -179,36 +79,22 @@ function fetchFromGusBir1(string $nip, string $date): ?array
             return null;
         }
 
-        $name = trim((string)($row['Nazwa'] ?? $row['nazwa'] ?? ''));
-        $regon = trim((string)($row['Regon'] ?? $row['regon'] ?? ''));
-        $city = trim((string)($row['Miejscowosc'] ?? $row['miejscowosc'] ?? ''));
-        $street = trim((string)($row['Ulica'] ?? $row['ulica'] ?? ''));
-        $buildingNumber = trim((string)($row['NrNieruchomosci'] ?? $row['nrNieruchomosci'] ?? $row['numer_budynku'] ?? ''));
-        $apartmentNumber = trim((string)($row['NrLokalu'] ?? $row['nrLokalu'] ?? $row['numer_lokalu'] ?? ''));
-        $postalCode = trim((string)($row['KodPocztowy'] ?? $row['kodPocztowy'] ?? $row['kod_pocztowy'] ?? ''));
-
-        $workingAddress = buildWorkingAddress($street, $buildingNumber, $apartmentNumber, $postalCode, $city);
+        $company = mapGusRowToCompany($row, $nip);
+        $company['workingAddress'] = buildWorkingAddress(
+            $company['street'],
+            $company['buildingNumber'],
+            $company['apartmentNumber'],
+            $company['postalCode'],
+            $company['city']
+        );
 
         return [
             'found' => true,
             'nip' => $nip,
-            'vatActive' => false,
-            'vatStatusRaw' => '',
             'source' => 'gus',
             'requestDate' => $date,
-            'company' => [
-                'name' => $name,
-                'nip' => $nip,
-                'country' => 'Polska',
-                'city' => $city,
-                'street' => $street,
-                'buildingNumber' => $buildingNumber,
-                'apartmentNumber' => $apartmentNumber,
-                'postalCode' => $postalCode,
-                'pkd' => $regon,
-                'workingAddress' => $workingAddress
-            ],
-            'raw' => ['source' => 'gus', 'regon' => $regon]
+            'company' => $company,
+            'raw' => $row
         ];
     } catch (Throwable $e) {
         error_log('GUS BIR1: ' . $e->getMessage());
@@ -217,8 +103,42 @@ function fetchFromGusBir1(string $nip, string $date): ?array
 }
 
 /**
+ * Mapuje wiersz XML GUS na obiekt company (wszystkie dostępne pola).
+ */
+function mapGusRowToCompany(array $row, string $nip): array
+{
+    $get = function (array $keys) use ($row): string {
+        foreach ($keys as $k) {
+            $v = $row[$k] ?? null;
+            if ($v !== null && $v !== '') {
+                return trim((string)$v);
+            }
+        }
+        return '';
+    };
+
+    return [
+        'name' => $get(['Nazwa', 'nazwa']),
+        'nip' => $nip,
+        'regon' => $get(['Regon', 'regon']),
+        'country' => 'Polska',
+        'voivodeship' => $get(['Wojewodztwo', 'wojewodztwo']),
+        'county' => $get(['Powiat', 'powiat']),
+        'municipality' => $get(['Gmina', 'gmina']),
+        'city' => $get(['Miejscowosc', 'miejscowosc']),
+        'postOffice' => $get(['MiejscowoscPoczty', 'miejscowoscPoczty']),
+        'street' => $get(['Ulica', 'ulica']),
+        'buildingNumber' => $get(['NrNieruchomosci', 'nrNieruchomosci', 'numer_budynku']),
+        'apartmentNumber' => $get(['NrLokalu', 'nrLokalu', 'numer_lokalu']),
+        'postalCode' => $get(['KodPocztowy', 'kodPocztowy', 'kod_pocztowy']),
+        'type' => $get(['Typ', 'typ']),
+        'pkd' => $get(['Regon', 'regon']),
+        'workingAddress' => ''
+    ];
+}
+
+/**
  * Parse GUS BIR1.1 XML result (root/row structure) into associative array.
- * Supports default namespace and http://CIS/BIR/PUBL/2014/07.
  */
 function parseGusXmlResult(string $xml): ?array
 {
@@ -274,41 +194,4 @@ function buildWorkingAddress(string $street, string $buildingNumber, string $apa
         $parts[] = trim($postalCode . ' ' . $city);
     }
     return implode(', ', $parts);
-}
-
-function parseAddress(string $workingAddress): array
-{
-    $result = [
-        'street' => '',
-        'buildingNumber' => '',
-        'apartmentNumber' => '',
-        'postalCode' => '',
-        'city' => ''
-    ];
-
-    if ($workingAddress === '') {
-        return $result;
-    }
-
-    // Typical MF format: "ULICA 12/4, 00-001 MIASTO"
-    $parts = array_map('trim', explode(',', $workingAddress, 2));
-    $streetPart = $parts[0] ?? '';
-    $cityPart = $parts[1] ?? '';
-
-    if (preg_match('/^(.*?)(?:\s+(\d+[A-Za-z]?))(?:\/(\d+[A-Za-z]?))?$/u', $streetPart, $m)) {
-        $result['street'] = trim($m[1]);
-        $result['buildingNumber'] = trim($m[2] ?? '');
-        $result['apartmentNumber'] = trim($m[3] ?? '');
-    } else {
-        $result['street'] = $streetPart;
-    }
-
-    if (preg_match('/(\d{2}-\d{3})\s+(.+)/u', $cityPart, $m)) {
-        $result['postalCode'] = trim($m[1]);
-        $result['city'] = trim($m[2]);
-    } else {
-        $result['city'] = $cityPart;
-    }
-
-    return $result;
 }

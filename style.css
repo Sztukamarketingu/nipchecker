@@ -234,6 +234,19 @@ body {
     background: #f5f7f9;
 }
 
+.raw-data-box {
+    min-height: 200px;
+    max-height: 400px;
+    overflow: auto;
+    font-size: 12px;
+    padding: 12px;
+    border: 1px solid var(--ui-color-base-30, #dfe0e3);
+    border-radius: 8px;
+    background: #f8f9fa;
+    white-space: pre-wrap;
+    word-break: break-all;
+}
+
 .actions-row {
     display: flex;
     gap: 10px;
