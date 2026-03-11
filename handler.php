@@ -12,17 +12,20 @@ if (!preg_match('/^\d{10}$/', $nip)) {
 
 $date = date('Y-m-d');
 
-// Tylko GUS BIR1.1 – jedyne źródło danych
-if (GUS_BIR1_KEY === '') {
-    http_response_code(500);
-    echo json_encode(['error' => 'Brak klucza GUS BIR1. Skonfiguruj GUS_BIR1_KEY.'], JSON_UNESCAPED_UNICODE);
+// 1. MF (Biała Lista) – firmy z VAT
+$mfResult = fetchFromMf($nip, $date);
+if ($mfResult !== null) {
+    echo json_encode($mfResult, JSON_UNESCAPED_UNICODE);
     exit;
 }
 
-$result = fetchFromGusBir1($nip, $date);
-if ($result !== null) {
-    echo json_encode($result, JSON_UNESCAPED_UNICODE);
-    exit;
+// 2. GUS BIR1.1 – fallback (gdy MF zwraca pusty)
+if (GUS_BIR1_KEY !== '') {
+    $gusResult = fetchFromGusBir1($nip, $date);
+    if ($gusResult !== null) {
+        echo json_encode($gusResult, JSON_UNESCAPED_UNICODE);
+        exit;
+    }
 }
 
 http_response_code(200);

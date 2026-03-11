@@ -124,7 +124,7 @@ require_once __DIR__ . '/config.php';
                 </div>
                 <p class="hint-text">
                     Aplikacja umożliwia stworzenie lub aktualizację danych firmy na podstawie numeru NIP
-                    (GUS BIR1).
+                    (MF Biała Lista + GUS BIR1).
                 </p>
             </div>
 
@@ -167,7 +167,7 @@ require_once __DIR__ . '/config.php';
 
         <section id="settingsTab" class="tab-content tab-hidden">
             <h3 class="section-title">Mapowanie pól</h3>
-            <p class="hint-text">Wybierz pola CRM dla danych pobieranych z GUS BIR1.</p>
+            <p class="hint-text">Wybierz pola CRM dla danych pobieranych z MF / GUS.</p>
             <div id="mappingContainer" class="mapping-container"></div>
             <div class="actions-row">
                 <button id="saveSettingsBtn" class="ui-btn ui-btn-primary">
