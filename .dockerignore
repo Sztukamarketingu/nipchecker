@@ -1,0 +1,9 @@
+.git
+.gitignore
+.env
+.env.example
+*.txt
+.deploy_nip_vps_key*
+DEPLOYMENT.md
+DEPLOY.md
+PRD.md

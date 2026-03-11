@@ -1,0 +1,22 @@
+# Produkcja na Hostinger VPS – pliki wbudowane w obraz (bez ngrok, bez GitHub)
+services:
+  nipchecker:
+    build: .
+    restart: always
+    environment:
+      - GUS_BIR1_KEY=c75480d07a764cc1945f
+      - GUS_BIR1_USE_TEST=false
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.nipchecker.rule=Host(`nip.aikuznia.cloud`)
+      - traefik.http.routers.nipchecker.entrypoints=websecure
+      - traefik.http.routers.nipchecker.tls=true
+      - traefik.http.routers.nipchecker.tls.certresolver=mytlschallenge
+      - traefik.http.services.nipchecker.loadbalancer.server.port=80
+      - traefik.docker.network=root_default
+    networks:
+      - root_default
+
+networks:
+  root_default:
+    external: true
