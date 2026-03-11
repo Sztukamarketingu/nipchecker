@@ -16,10 +16,16 @@ if (!preg_match('/^\d{10}$/', $nip)) {
 }
 
 $date = date('Y-m-d');
+$debug = isset($_GET['debug']) && $_GET['debug'] === '1';
 
 // GUS BIR1.1 – jedyne źródło danych
-$result = fetchFromGusBir1($nip, $date);
+$result = fetchFromGusBir1($nip, $date, $debug);
 if ($result !== null) {
+    if (is_array($result) && isset($result['found'])) {
+        echo json_encode($result, JSON_UNESCAPED_UNICODE);
+        exit;
+    }
+    // debug zwrócił błąd
     echo json_encode($result, JSON_UNESCAPED_UNICODE);
     exit;
 }
@@ -133,7 +139,7 @@ function fetchFromMf(string $nip, string $date): ?array
 /**
  * GUS BIR1.1 – wszystkie podmioty (przez GusApi z obsługą MTOM).
  */
-function fetchFromGusBir1(string $nip, string $date): ?array
+function fetchFromGusBir1(string $nip, string $date, bool $debug = false): array|null
 {
     $useTest = defined('GUS_BIR1_USE_TEST') && GUS_BIR1_USE_TEST;
     $env = $useTest ? 'dev' : 'prod';
@@ -145,16 +151,21 @@ function fetchFromGusBir1(string $nip, string $date): ?array
         $gus->logout();
     } catch (InvalidUserKeyException $e) {
         error_log('GUS BIR1: Nieprawidłowy klucz API');
-        return null;
+        return $debug ? ['found' => false, 'debug_error' => 'InvalidUserKeyException: Nieprawidłowy klucz API'] : null;
     } catch (NotFoundException $e) {
-        return null;
+        return $debug ? ['found' => false, 'debug_error' => 'NotFoundException: GUS nie znalazł podmiotu'] : null;
     } catch (Throwable $e) {
         error_log('GUS BIR1: ' . $e->getMessage());
-        return null;
+        return $debug ? [
+            'found' => false,
+            'debug_error' => $e->getMessage(),
+            'debug_class' => get_class($e),
+            'debug_file' => $e->getFile() . ':' . $e->getLine()
+        ] : null;
     }
 
     if (empty($reports)) {
-        return null;
+        return $debug ? ['found' => false, 'debug_error' => 'GUS zwrócił pustą listę'] : null;
     }
 
     $report = $reports[0];
