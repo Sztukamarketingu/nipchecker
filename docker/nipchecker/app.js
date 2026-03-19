@@ -397,7 +397,7 @@
     }
 
     function normalizeNip(val) {
-        if (!val) return "";
+        if (val === null || val === undefined) return "";
         return String(val).replace(/\D/g, "");
     }
 
@@ -408,45 +408,24 @@
     }
 
     function checkDuplicateByNip(nip, callback) {
-        var candidates = [];
-        if (state.mapping && state.mapping.nip) {
-            candidates.push(state.mapping.nip);
-        }
-        ["UF_CRM_NIP", "UF_CRM_123_NIP"].forEach(function (fieldCode) {
-            if (candidates.indexOf(fieldCode) === -1) {
-                candidates.push(fieldCode);
-            }
-        });
-
-        tryDuplicateField(candidates, nip, callback);
-    }
-
-    function tryDuplicateField(fields, nip, callback) {
-        if (!fields.length) {
+        var nipNorm = normalizeNip(nip);
+        if (nipNorm.length !== 10) {
             callback(null);
             return;
         }
 
-        var fieldCode = fields[0];
-        var nipNorm = normalizeNip(nip);
-        if (nipNorm.length !== 10) {
-            tryDuplicateField(fields.slice(1), nip, callback);
-            return;
-        }
-
-        var searchValues = [nipNorm];
-        searchValues.push(nipNorm.slice(0, 3) + "-" + nipNorm.slice(3, 6) + "-" + nipNorm.slice(6, 8) + "-" + nipNorm.slice(8, 10));
-
-        trySearchWithValues(fieldCode, searchValues, 0, nip, fields, callback);
+        var nipFields = ["UF_CRM_NIP", "UF_CRM_123_NIP"];
+        tryFieldWithFilter(nipFields, 0, nip, callback);
     }
 
-    function trySearchWithValues(fieldCode, searchValues, idx, nip, fields, callback) {
-        if (idx >= searchValues.length) {
-            tryDuplicateField(fields.slice(1), nip, callback);
+    function tryFieldWithFilter(nipFields, fieldIndex, nip, callback) {
+        if (fieldIndex >= nipFields.length) {
+            callback(null);
             return;
         }
+        var fieldCode = nipFields[fieldIndex];
         var filter = {};
-        filter[fieldCode] = searchValues[idx];
+        filter["=" + fieldCode] = nip;
 
         BX24.callMethod(
             "crm.company.list",
@@ -456,19 +435,26 @@
             },
             function (result) {
                 if (result.error()) {
-                    trySearchWithValues(fieldCode, searchValues, idx + 1, nip, fields, callback);
+                    tryFieldWithFilter(nipFields, fieldIndex + 1, nip, callback);
                     return;
                 }
                 var rows = result.data() || [];
+                if (!Array.isArray(rows)) rows = [];
                 for (var i = 0; i < rows.length; i++) {
                     var row = rows[i];
-                    var storedVal = row[fieldCode];
+                    var storedVal = row && row[fieldCode];
+                    if (typeof storedVal === "object" && storedVal !== null && storedVal.value !== undefined) {
+                        storedVal = storedVal.value;
+                    }
                     if (nipMatches(storedVal, nip)) {
-                        callback(toNumber(row.ID));
-                        return;
+                        var id = toNumber(row.ID);
+                        if (id) {
+                            callback(id);
+                            return;
+                        }
                     }
                 }
-                trySearchWithValues(fieldCode, searchValues, idx + 1, nip, fields, callback);
+                tryFieldWithFilter(nipFields, fieldIndex + 1, nip, callback);
             }
         );
     }
