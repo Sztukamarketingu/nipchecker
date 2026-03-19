@@ -352,7 +352,7 @@
         checkDuplicateByNip(state.lastResult.company.nip, state.lastResult.company.name, function (duplicateId) {
             if (mode === "create") {
                 if (duplicateId) {
-                    showDuplicateWarning("Firma o tym NIP już istnieje (ID: " + duplicateId + "). Użyj aktualizacji.");
+                    showDuplicateWarning("Firma o tej nazwie już istnieje (ID: " + duplicateId + "). Użyj aktualizacji.");
                     return;
                 }
                 BX24.callMethod("crm.company.add", { fields: crmFields }, function (result) {
@@ -416,146 +416,34 @@
         return n.slice(0, 3) + "-" + n.slice(3, 5) + "-" + n.slice(5, 7) + "-" + n.slice(7, 10);
     }
 
-    function getAllNipFieldCodes() {
-        var codes = [];
-        if (state.mapping && state.mapping.nip) codes.push(state.mapping.nip);
-        var fields = state.companyFields || {};
-        Object.keys(fields).forEach(function (code) {
-            var meta = fields[code] || {};
-            var label = (pickBestLabel(meta, code) + " " + code).toLowerCase();
-            if (label.indexOf("nip") !== -1 && codes.indexOf(code) === -1) codes.push(code);
-        });
-        ["UF_CRM_NIP", "UF_CRM_123_NIP", "COMMENTS"].forEach(function (code) {
-            if (codes.indexOf(code) === -1) codes.push(code);
-        });
-        return codes;
-    }
-
     function checkDuplicateByNip(nip, companyName, callback) {
         if (typeof companyName === "function") {
             callback = companyName;
             companyName = null;
         }
-        var nipNorm = normalizeNip(nip);
-        if (nipNorm.length !== 10) {
-            callback(null);
-            return;
-        }
-
-        var nipFields = getAllNipFieldCodes();
-        tryFallbackSearch(nip, companyName, function (id) {
-            if (id) {
-                callback(id);
-                return;
-            }
-            tryFieldWithFilter(nipFields, 0, nip, companyName, callback);
-        });
-    }
-
-    function tryFieldWithFilter(nipFields, fieldIndex, nip, companyName, callback) {
-        if (fieldIndex >= nipFields.length) {
-            callback(null);
-            return;
-        }
-        var fieldCode = nipFields[fieldIndex];
-        var nipNorm = normalizeNip(nip);
-        var nipDashed = formatNipWithDashes(nip);
-        var filterValues = [nipNorm, nipDashed];
-        if (nipNorm !== nip && nip !== nipDashed) filterValues.push(String(nip));
-
-        tryFilterValue(nipFields, fieldIndex, nip, companyName, filterValues, 0, callback);
-    }
-
-    function tryFilterValue(nipFields, fieldIndex, nip, companyName, filterValues, valueIndex, callback) {
-        if (valueIndex >= filterValues.length) {
-            tryFieldWithFilter(nipFields, fieldIndex + 1, nip, companyName, callback);
-            return;
-        }
-        var fieldCode = nipFields[fieldIndex];
-        var filterVal = filterValues[valueIndex];
-        var filter = {};
-        filter["=" + fieldCode] = filterVal;
-
-        BX24.callMethod(
-            "crm.company.list",
-            {
-                select: ["ID", fieldCode],
-                filter: filter
-            },
-            function (result) {
-                if (result.error()) {
-                    tryFilterValue(nipFields, fieldIndex, nip, companyName, filterValues, valueIndex + 1, callback);
-                    return;
-                }
-                var rows = result.data() || [];
-                if (rows && typeof rows === "object" && !Array.isArray(rows) && rows.result) rows = rows.result;
-                if (!Array.isArray(rows)) rows = [];
-                for (var i = 0; i < rows.length; i++) {
-                    var row = rows[i];
-                    var storedVal = row && row[fieldCode];
-                    if (typeof storedVal === "object" && storedVal !== null && storedVal.value !== undefined) {
-                        storedVal = storedVal.value;
-                    }
-                    if (nipMatches(storedVal, nip)) {
-                        var id = toNumber(row.ID);
-                        if (id) {
-                            callback(id);
-                            return;
-                        }
-                    }
-                }
-                tryFilterValue(nipFields, fieldIndex, nip, companyName, filterValues, valueIndex + 1, callback);
-            }
-        );
-    }
-
-    function tryFallbackSearch(nip, companyName, callback) {
-        var nipFields = getAllNipFieldCodes();
-        var select = ["ID", "TITLE", "UF_*"].concat(nipFields);
-        select = select.filter(function (v, i, a) { return a.indexOf(v) === i; });
-
-        function searchByFilter(filter, done) {
+        var name = companyName ? String(companyName).trim() : "";
+        if (name) {
             BX24.callMethod("crm.company.list", {
-                select: select,
-                filter: filter,
-                order: { ID: "DESC" }
+                select: ["ID"],
+                filter: { "=TITLE": name }
             }, function (result) {
                 if (result.error()) {
-                    done(null);
+                    callback(null);
                     return;
                 }
                 var rows = result.data() || [];
                 if (rows && typeof rows === "object" && !Array.isArray(rows) && rows.result) rows = rows.result;
-                if (!Array.isArray(rows)) rows = [];
-                for (var i = 0; i < rows.length; i++) {
-                    var row = rows[i];
-                    var keys = Object.keys(row || {});
-                    for (var j = 0; j < keys.length; j++) {
-                        var val = row[keys[j]];
-                        if (typeof val === "object" && val !== null && val.value !== undefined) val = val.value;
-                        if (nipMatches(val, nip)) {
-                            var id = toNumber(row.ID);
-                            if (id) {
-                                done(id);
-                                return;
-                            }
-                        }
+                if (Array.isArray(rows) && rows.length > 0) {
+                    var id = toNumber(rows[0].ID);
+                    if (id) {
+                        callback(id);
+                        return;
                     }
                 }
-                done(null);
-            });
-        }
-
-        if (companyName && String(companyName).trim()) {
-            searchByFilter({ "=TITLE": String(companyName).trim() }, function (id) {
-                if (id) {
-                    callback(id);
-                    return;
-                }
-                searchByFilter({}, callback);
+                callback(null);
             });
         } else {
-            searchByFilter({}, callback);
+            callback(null);
         }
     }
 
