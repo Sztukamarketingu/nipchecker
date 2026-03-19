@@ -396,12 +396,23 @@
         return payload;
     }
 
+    function normalizeNip(val) {
+        if (!val) return "";
+        return String(val).replace(/\D/g, "");
+    }
+
+    function nipMatches(storedVal, searchNip) {
+        var a = normalizeNip(storedVal);
+        var b = normalizeNip(searchNip);
+        return a.length === 10 && b.length === 10 && a === b;
+    }
+
     function checkDuplicateByNip(nip, callback) {
         var candidates = [];
         if (state.mapping && state.mapping.nip) {
             candidates.push(state.mapping.nip);
         }
-        ["UF_CRM_NIP", "UF_CRM_123_NIP", "COMMENTS"].forEach(function (fieldCode) {
+        ["UF_CRM_NIP", "UF_CRM_123_NIP"].forEach(function (fieldCode) {
             if (candidates.indexOf(fieldCode) === -1) {
                 candidates.push(fieldCode);
             }
@@ -417,8 +428,25 @@
         }
 
         var fieldCode = fields[0];
+        var nipNorm = normalizeNip(nip);
+        if (nipNorm.length !== 10) {
+            tryDuplicateField(fields.slice(1), nip, callback);
+            return;
+        }
+
+        var searchValues = [nipNorm];
+        searchValues.push(nipNorm.slice(0, 3) + "-" + nipNorm.slice(3, 6) + "-" + nipNorm.slice(6, 8) + "-" + nipNorm.slice(8, 10));
+
+        trySearchWithValues(fieldCode, searchValues, 0, nip, fields, callback);
+    }
+
+    function trySearchWithValues(fieldCode, searchValues, idx, nip, fields, callback) {
+        if (idx >= searchValues.length) {
+            tryDuplicateField(fields.slice(1), nip, callback);
+            return;
+        }
         var filter = {};
-        filter["=" + fieldCode] = nip;
+        filter[fieldCode] = searchValues[idx];
 
         BX24.callMethod(
             "crm.company.list",
@@ -427,14 +455,20 @@
                 filter: filter
             },
             function (result) {
-                if (!result.error()) {
-                    var rows = result.data() || [];
-                    if (rows.length) {
-                        callback(toNumber(rows[0].ID));
+                if (result.error()) {
+                    trySearchWithValues(fieldCode, searchValues, idx + 1, nip, fields, callback);
+                    return;
+                }
+                var rows = result.data() || [];
+                for (var i = 0; i < rows.length; i++) {
+                    var row = rows[i];
+                    var storedVal = row[fieldCode];
+                    if (nipMatches(storedVal, nip)) {
+                        callback(toNumber(row.ID));
                         return;
                     }
                 }
-                tryDuplicateField(fields.slice(1), nip, callback);
+                trySearchWithValues(fieldCode, searchValues, idx + 1, nip, fields, callback);
             }
         );
     }
