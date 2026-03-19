@@ -387,6 +387,9 @@
             var crmField = state.mapping[sourceKey];
             if (!crmField) return;
             var value = (sourceKey === "address") ? addressValue : source[sourceKey];
+            if (sourceKey === "nip" && value) {
+                value = normalizeNip(value);
+            }
             if (value) payload[crmField] = value;
         });
 
@@ -407,6 +410,12 @@
         return a.length === 10 && b.length === 10 && a === b;
     }
 
+    function formatNipWithDashes(nip) {
+        var n = normalizeNip(nip);
+        if (n.length !== 10) return n;
+        return n.slice(0, 3) + "-" + n.slice(3, 5) + "-" + n.slice(5, 7) + "-" + n.slice(7, 10);
+    }
+
     function checkDuplicateByNip(nip, callback) {
         var nipNorm = normalizeNip(nip);
         if (nipNorm.length !== 10) {
@@ -414,7 +423,14 @@
             return;
         }
 
-        var nipFields = ["UF_CRM_NIP", "UF_CRM_123_NIP"];
+        var nipFields = [];
+        if (state.mapping && state.mapping.nip) {
+            nipFields.push(state.mapping.nip);
+        }
+        ["UF_CRM_NIP", "UF_CRM_123_NIP", "COMMENTS"].forEach(function (code) {
+            if (nipFields.indexOf(code) === -1) nipFields.push(code);
+        });
+
         tryFieldWithFilter(nipFields, 0, nip, callback);
     }
 
@@ -424,8 +440,23 @@
             return;
         }
         var fieldCode = nipFields[fieldIndex];
+        var nipNorm = normalizeNip(nip);
+        var nipDashed = formatNipWithDashes(nip);
+        var filterValues = [nipNorm, nipDashed];
+        if (nipNorm !== nip && nip !== nipDashed) filterValues.push(String(nip));
+
+        tryFilterValue(nipFields, fieldIndex, nip, filterValues, 0, callback);
+    }
+
+    function tryFilterValue(nipFields, fieldIndex, nip, filterValues, valueIndex, callback) {
+        if (valueIndex >= filterValues.length) {
+            tryFieldWithFilter(nipFields, fieldIndex + 1, nip, callback);
+            return;
+        }
+        var fieldCode = nipFields[fieldIndex];
+        var filterVal = filterValues[valueIndex];
         var filter = {};
-        filter["=" + fieldCode] = nip;
+        filter["=" + fieldCode] = filterVal;
 
         BX24.callMethod(
             "crm.company.list",
@@ -435,7 +466,7 @@
             },
             function (result) {
                 if (result.error()) {
-                    tryFieldWithFilter(nipFields, fieldIndex + 1, nip, callback);
+                    tryFilterValue(nipFields, fieldIndex, nip, filterValues, valueIndex + 1, callback);
                     return;
                 }
                 var rows = result.data() || [];
@@ -454,7 +485,7 @@
                         }
                     }
                 }
-                tryFieldWithFilter(nipFields, fieldIndex + 1, nip, callback);
+                tryFilterValue(nipFields, fieldIndex, nip, filterValues, valueIndex + 1, callback);
             }
         );
     }
