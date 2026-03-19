@@ -14,7 +14,7 @@ Application version is managed in one place:
 
 ### How to release next version
 
-1. Increase `APP_VERSION` in `config.php` (for example: `2026.03.06.2`).
+1. Increase `APP_VERSION` in `config.php` (np. `2.1`, `2.2`, `2.3`).
 2. Deploy updated files to server.
 3. In Bitrix24 click `Reinstall` for the local app.
 

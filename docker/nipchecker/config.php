@@ -2,7 +2,7 @@
 declare(strict_types=1);
 
 // Single source of truth for application release version.
-const APP_VERSION = '2026.03.19.v3';
+const APP_VERSION = '2.1';
 
 // Production endpoints for Bitrix local app settings.
 const BITRIX_HANDLER_PATH = 'https://nip.aikuznia.cloud/index.php';
