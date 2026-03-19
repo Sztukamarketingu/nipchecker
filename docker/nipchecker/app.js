@@ -443,12 +443,18 @@
         }
 
         var nipFields = getAllNipFieldCodes();
-        tryFieldWithFilter(nipFields, 0, nip, companyName, callback);
+        tryFallbackSearch(nip, companyName, function (id) {
+            if (id) {
+                callback(id);
+                return;
+            }
+            tryFieldWithFilter(nipFields, 0, nip, companyName, callback);
+        });
     }
 
     function tryFieldWithFilter(nipFields, fieldIndex, nip, companyName, callback) {
         if (fieldIndex >= nipFields.length) {
-            tryFallbackSearch(nip, companyName, callback);
+            callback(null);
             return;
         }
         var fieldCode = nipFields[fieldIndex];
@@ -482,6 +488,7 @@
                     return;
                 }
                 var rows = result.data() || [];
+                if (rows && typeof rows === "object" && !Array.isArray(rows) && rows.result) rows = rows.result;
                 if (!Array.isArray(rows)) rows = [];
                 for (var i = 0; i < rows.length; i++) {
                     var row = rows[i];
@@ -504,7 +511,8 @@
 
     function tryFallbackSearch(nip, companyName, callback) {
         var nipFields = getAllNipFieldCodes();
-        var select = ["ID"].concat(nipFields);
+        var select = ["ID", "TITLE", "UF_*"].concat(nipFields);
+        select = select.filter(function (v, i, a) { return a.indexOf(v) === i; });
 
         function searchByFilter(filter, done) {
             BX24.callMethod("crm.company.list", {
@@ -517,11 +525,13 @@
                     return;
                 }
                 var rows = result.data() || [];
+                if (rows && typeof rows === "object" && !Array.isArray(rows) && rows.result) rows = rows.result;
                 if (!Array.isArray(rows)) rows = [];
                 for (var i = 0; i < rows.length; i++) {
                     var row = rows[i];
-                    for (var j = 0; j < nipFields.length; j++) {
-                        var val = row && row[nipFields[j]];
+                    var keys = Object.keys(row || {});
+                    for (var j = 0; j < keys.length; j++) {
+                        var val = row[keys[j]];
                         if (typeof val === "object" && val !== null && val.value !== undefined) val = val.value;
                         if (nipMatches(val, nip)) {
                             var id = toNumber(row.ID);
