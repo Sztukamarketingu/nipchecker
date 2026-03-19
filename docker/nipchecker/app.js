@@ -349,7 +349,7 @@
             return;
         }
 
-        checkDuplicateByNip(state.lastResult.company.nip, function (duplicateId) {
+        checkDuplicateByNip(state.lastResult.company.nip, state.lastResult.company.name, function (duplicateId) {
             if (mode === "create") {
                 if (duplicateId) {
                     showDuplicateWarning("Firma o tym NIP już istnieje (ID: " + duplicateId + "). Użyj aktualizacji.");
@@ -416,27 +416,39 @@
         return n.slice(0, 3) + "-" + n.slice(3, 5) + "-" + n.slice(5, 7) + "-" + n.slice(7, 10);
     }
 
-    function checkDuplicateByNip(nip, callback) {
+    function getAllNipFieldCodes() {
+        var codes = [];
+        if (state.mapping && state.mapping.nip) codes.push(state.mapping.nip);
+        var fields = state.companyFields || {};
+        Object.keys(fields).forEach(function (code) {
+            var meta = fields[code] || {};
+            var label = (pickBestLabel(meta, code) + " " + code).toLowerCase();
+            if (label.indexOf("nip") !== -1 && codes.indexOf(code) === -1) codes.push(code);
+        });
+        ["UF_CRM_NIP", "UF_CRM_123_NIP", "COMMENTS"].forEach(function (code) {
+            if (codes.indexOf(code) === -1) codes.push(code);
+        });
+        return codes;
+    }
+
+    function checkDuplicateByNip(nip, companyName, callback) {
+        if (typeof companyName === "function") {
+            callback = companyName;
+            companyName = null;
+        }
         var nipNorm = normalizeNip(nip);
         if (nipNorm.length !== 10) {
             callback(null);
             return;
         }
 
-        var nipFields = [];
-        if (state.mapping && state.mapping.nip) {
-            nipFields.push(state.mapping.nip);
-        }
-        ["UF_CRM_NIP", "UF_CRM_123_NIP", "COMMENTS"].forEach(function (code) {
-            if (nipFields.indexOf(code) === -1) nipFields.push(code);
-        });
-
-        tryFieldWithFilter(nipFields, 0, nip, callback);
+        var nipFields = getAllNipFieldCodes();
+        tryFieldWithFilter(nipFields, 0, nip, companyName, callback);
     }
 
-    function tryFieldWithFilter(nipFields, fieldIndex, nip, callback) {
+    function tryFieldWithFilter(nipFields, fieldIndex, nip, companyName, callback) {
         if (fieldIndex >= nipFields.length) {
-            callback(null);
+            tryFallbackSearch(nip, companyName, callback);
             return;
         }
         var fieldCode = nipFields[fieldIndex];
@@ -445,12 +457,12 @@
         var filterValues = [nipNorm, nipDashed];
         if (nipNorm !== nip && nip !== nipDashed) filterValues.push(String(nip));
 
-        tryFilterValue(nipFields, fieldIndex, nip, filterValues, 0, callback);
+        tryFilterValue(nipFields, fieldIndex, nip, companyName, filterValues, 0, callback);
     }
 
-    function tryFilterValue(nipFields, fieldIndex, nip, filterValues, valueIndex, callback) {
+    function tryFilterValue(nipFields, fieldIndex, nip, companyName, filterValues, valueIndex, callback) {
         if (valueIndex >= filterValues.length) {
-            tryFieldWithFilter(nipFields, fieldIndex + 1, nip, callback);
+            tryFieldWithFilter(nipFields, fieldIndex + 1, nip, companyName, callback);
             return;
         }
         var fieldCode = nipFields[fieldIndex];
@@ -466,7 +478,7 @@
             },
             function (result) {
                 if (result.error()) {
-                    tryFilterValue(nipFields, fieldIndex, nip, filterValues, valueIndex + 1, callback);
+                    tryFilterValue(nipFields, fieldIndex, nip, companyName, filterValues, valueIndex + 1, callback);
                     return;
                 }
                 var rows = result.data() || [];
@@ -485,9 +497,56 @@
                         }
                     }
                 }
-                tryFilterValue(nipFields, fieldIndex, nip, filterValues, valueIndex + 1, callback);
+                tryFilterValue(nipFields, fieldIndex, nip, companyName, filterValues, valueIndex + 1, callback);
             }
         );
+    }
+
+    function tryFallbackSearch(nip, companyName, callback) {
+        var nipFields = getAllNipFieldCodes();
+        var select = ["ID"].concat(nipFields);
+
+        function searchByFilter(filter, done) {
+            BX24.callMethod("crm.company.list", {
+                select: select,
+                filter: filter,
+                order: { ID: "DESC" }
+            }, function (result) {
+                if (result.error()) {
+                    done(null);
+                    return;
+                }
+                var rows = result.data() || [];
+                if (!Array.isArray(rows)) rows = [];
+                for (var i = 0; i < rows.length; i++) {
+                    var row = rows[i];
+                    for (var j = 0; j < nipFields.length; j++) {
+                        var val = row && row[nipFields[j]];
+                        if (typeof val === "object" && val !== null && val.value !== undefined) val = val.value;
+                        if (nipMatches(val, nip)) {
+                            var id = toNumber(row.ID);
+                            if (id) {
+                                done(id);
+                                return;
+                            }
+                        }
+                    }
+                }
+                done(null);
+            });
+        }
+
+        if (companyName && String(companyName).trim()) {
+            searchByFilter({ "=TITLE": String(companyName).trim() }, function (id) {
+                if (id) {
+                    callback(id);
+                    return;
+                }
+                searchByFilter({}, callback);
+            });
+        } else {
+            searchByFilter({}, callback);
+        }
     }
 
     function showDuplicateWarning(message) {
